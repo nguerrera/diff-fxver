@@ -1,287 +1,257 @@
-
-
-static pal::string_t getId(const pal::string_t &ids, size_t idStart)
-{
-    size_t next = ids.find(_X('.'), idStart);
-
-    return next == pal::string_t::npos ? ids.substr(idStart) : ids.substr(idStart, next - idStart);
-}
-
-/* static */
-int fx_ver_t::compare(const fx_ver_t&a, const fx_ver_t& b)
-{
-    // compare(u.v.w-p+b, x.y.z-q+c)
-    if (a.m_major != b.m_major)
-    {
-        return (a.m_major > b.m_major) ? 1 : -1;
-    }
-
-    if (a.m_minor != b.m_minor)
-    {
-        return (a.m_minor > b.m_minor) ? 1 : -1;
-    }
-
-    if (a.m_patch != b.m_patch)
-    {
-        return (a.m_patch > b.m_patch) ? 1 : -1;
-    }
-
-    if (a.m_pre.empty() || b.m_pre.empty())
-    {
-        // Either a is empty or b is empty or both are empty
-        return a.m_pre.empty() ? !b.m_pre.empty() : -1;
-    }
-
-    // Both are non-empty (may be equal)
-
-    // First character of pre is '-' when it is not empty
-    assert(a.m_pre[0] == _X('-'));
-    assert(b.m_pre[0] == _X('-'));
-
-    // First idenitifier starts at position 1
-    size_t idStart = 1;
-    for (size_t i = idStart; true; ++i)
-    {
-        if (a.m_pre[i] != b.m_pre[i])
+        private static string GetId(string ids, int idStart)
         {
-            // Found first character with a difference
-            if (a.m_pre[i] == 0 && b.m_pre[i] == _X('.'))
-            {
-                // identifiers both complete, b has an additional ident
-                return -1;
-            }
+            int next = ids.IndexOf('.', idStart);
 
-            if (b.m_pre[i] == 0 && a.m_pre[i] == _X('.'))
-            {
-                // identifiers both complete, a has an additional ident
-                return 1;
-            }
-
-            // identifiers must not be empty
-            pal::string_t ida = getId(a.m_pre, idStart);
-            pal::string_t idb = getId(b.m_pre, idStart);
-
-            unsigned idanum = 0;
-            bool idaIsNum = try_stou(ida, &idanum);
-            unsigned idbnum = 0;
-            bool idbIsNum = try_stou(idb, &idbnum);
-
-            if (idaIsNum && idbIsNum)
-            {
-                // Numeric comparison
-                return (idanum > idbnum) ? 1 : -1;
-            }
-            else if (idaIsNum || idbIsNum)
-            {
-                // Mixed compare.  Spec: Number < Text
-                return idbIsNum ? 1 : -1;
-            }
-            // Ascii compare
-            return ida.compare(idb);
+            return next == -1 ? ids.Substring(idStart) : ids.Substring(idStart, next - idStart);
         }
-        else
+
+        public static int Compare(FXVersion s1, FXVersion s2)
         {
-            // a.m_pre[i] == b.m_pre[i]
-            if (a.m_pre[i] == 0)
+            if (s1.Major != s2.Major)
             {
-                break;
+                return s1.Major > s2.Major ? 1 : -1;
             }
-            if (a.m_pre[i] == _X('.'))
+
+            if (s1.Minor != s2.Minor)
             {
-                idStart = i + 1;
+                return s1.Minor > s2.Minor ? 1 : -1;
             }
+
+            if (s1.Patch != s2.Patch)
+            {
+                return s1.Patch > s2.Patch ? 1 : -1;
+            }
+
+            if (string.IsNullOrEmpty(s1.Pre) || string.IsNullOrEmpty(s2.Pre))
+            {
+                // Empty (release) is higher precedence than prerelease
+                return string.IsNullOrEmpty(s1.Pre) ? (string.IsNullOrEmpty(s2.Pre) ? 0 : 1) : -1;
+            }
+
+            // First idenitifier starts at position 1
+            int idStart = 1;
+            for (int i = idStart; true; ++i)
+            {
+                // C# strings are not null terminated. Pretend to make code similar to fx_ver.cpp
+                char s1char = (s1.Pre.Length  == i) ? '\0' : s1.Pre[i];
+                char s2char = (s2.Pre.Length  == i) ? '\0' : s2.Pre[i];
+                if (s1char != s2char)
+                {
+                    // Found first character with a difference
+                    if (s1char == '\0' && s2char == '.')
+                    {
+                        // identifiers both complete, b has an additional identifier
+                        return -1;
+                    }
+
+                    if (s2char == '\0' && s1char == '.')
+                    {
+                        // identifiers both complete, a has an additional identifier
+                        return 1;
+                    }
+
+                    // identifiers must not be empty
+                    string id1 = GetId(s1.Pre, idStart);
+                    string id2 = GetId(s2.Pre, idStart);
+
+                    int id1num = 0;
+                    bool id1IsNum = int.TryParse(id1, out id1num);
+                    int id2num = 0;
+                    bool id2IsNum = int.TryParse(id2, out id2num);
+
+                    if (id1IsNum && id2IsNum)
+                    {
+                        // Numeric comparison
+                        return (id1num > id2num) ? 1 : -1;
+                    }
+                    else if (id2IsNum || id2IsNum)
+                    {
+                        // Mixed compare.  Spec: Number < Text
+                        return id2IsNum ? 1 : -1;
+                    }
+                    // Both are alphanumeric, use ascii sort order
+                    // Since we are using only ascii characters, unicode ordinal sort == ascii sort
+                    return (string.CompareOrdinal(id1, id2) > 0) ? 1 : -1;
+                }
+                else
+                {
+                    // s1char == s2char
+                    if (s1char == '\0')
+                    {
+                        break;
+                    }
+                    if (s1char == '.')
+                    {
+                        idStart = i + 1;
+                    }
+                }
+            }
+            return 0;
         }
-    }
 
-    return 0;
-}
-
-static bool validIdentifierCharSet(const pal::string_t& id)
-{
-    // ids must be of the set [0-9a-zA-Z-]
-
-    // ASCII and Unicode ordering
-    static_assert(_X('-') < _X('0'), "Code assumes ordering - < 0 < 9 < A < Z < a < z");
-    static_assert(_X('0') < _X('9'), "Code assumes ordering - < 0 < 9 < A < Z < a < z");
-    static_assert(_X('9') < _X('A'), "Code assumes ordering - < 0 < 9 < A < Z < a < z");
-    static_assert(_X('A') < _X('Z'), "Code assumes ordering - < 0 < 9 < A < Z < a < z");
-    static_assert(_X('Z') < _X('a'), "Code assumes ordering - < 0 < 9 < A < Z < a < z");
-    static_assert(_X('a') < _X('z'), "Code assumes ordering - < 0 < 9 < A < Z < a < z");
-
-    for (size_t i = 0; id[i] != 0; ++i)
-    {
-        if (id[i] >= _X('A'))
+        static bool ValidIdentifierCharSet(string id)
         {
-            if ((id[i] > _X('Z') && id[i] < _X('a')) || id[i] > _X('z'))
+            // ids must be of the set [0-9a-zA-Z-]
+            for (int i = 0; i < id.Length; ++i)
+            {
+                if (id[i] >= 'A')
+                {
+                    if ((id[i] > 'Z' && id[i] < 'a') || id[i] > 'z')
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    if ((id[i] < '0' && id[i] != '-') || id[i] > '9')
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        private static bool ValidIdentifier(string id, bool buildMeta)
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                // Identifier must not be empty
+                return false;
+            }
+
+            if (!ValidIdentifierCharSet(id))
             {
                 return false;
             }
+
+            int ignored;
+            if (!buildMeta && id[0] == '0' && id.Length > 1 && int.TryParse(id, out ignored))
+            {
+                // numeric identifiers must not be padded with 0s
+                return false;
+            }
+            return true;
         }
-        else
+
+        private static bool ValidIdentifiers(string ids)
         {
-            if ((id[i] < _X('0') && id[i] != _X('-')) || id[i] > _X('9'))
+            if (string.IsNullOrEmpty(ids))
+            {
+                return true;
+            }
+
+            bool prerelease = ids[0] == '-';
+            bool buildMeta = ids[0] == '+';
+
+            if (!(prerelease || buildMeta))
+            {
+                // ids must start with '-' or '+' for prerelease & build respectively
+                return false;
+            }
+
+            foreach (string id in ids.Substring(1).Split('.'))
+            {
+                if (!ValidIdentifier(id, buildMeta))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public static bool TryParse(string fxVersionString, out FXVersion FXVersion)
+        {
+            FXVersion = null;
+            if (string.IsNullOrEmpty(fxVersionString))
             {
                 return false;
             }
+
+            int majorSeparator = fxVersionString.IndexOf(".");
+            if (majorSeparator == -1)
+            {
+                return false;
+            }
+
+            int major = 0;
+            if (!int.TryParse(fxVersionString.Substring(0, majorSeparator), out major))
+            {
+                return false;
+            }
+            if (majorSeparator > 1 && fxVersionString[0] == '0')
+            {
+                return false;
+            }
+
+            int minorStart = majorSeparator + 1;
+            int minorSeparator = fxVersionString.IndexOf(".", minorStart);
+            if (minorSeparator == -1)
+            {
+                return false;
+            }
+
+            int minor = 0;
+            if (!int.TryParse(fxVersionString.Substring(minorStart, minorSeparator - minorStart), out minor))
+            {
+                return false;
+            }
+            if (minorSeparator - minorStart > 1 && fxVersionString[minorStart] == '0')
+            {
+                return false;
+            }
+
+            int patch = 0;
+            int patchStart = minorSeparator + 1;
+            int patchSeparator = fxVersionString.FindFirstNotOf("0123456789", patchStart);
+            if (patchSeparator == -1)
+            {
+                if (!int.TryParse(fxVersionString.Substring(patchStart), out patch))
+                {
+                    return false;
+                }
+                if (patchStart + 1 < fxVersionString.Length && fxVersionString[patchStart] == '0')
+                {
+                    return false;
+                }
+
+                FXVersion = new FXVersion(major, minor, patch);
+                return true;
+            }
+
+            if (!int.TryParse(fxVersionString.Substring(patchStart, patchSeparator - patchStart), out patch))
+            {
+                return false;
+            }
+            if (patchSeparator - patchStart > 1 && fxVersionString[patchStart] == '0')
+            {
+                return false;
+            }
+
+            int preStart = patchSeparator;
+            int preSeparator = fxVersionString.IndexOf("+", preStart);
+
+            string pre = (preSeparator == -1) ? fxVersionString.Substring(preStart) : fxVersionString.Substring(preStart, preSeparator - preStart);
+
+            if (!ValidIdentifiers(pre))
+            {
+                return false;
+            }
+
+            string build = "";
+            if (preSeparator != -1)
+            {
+                build = fxVersionString.Substring(preSeparator);
+                if (!ValidIdentifiers(build))
+                {
+                    return false;
+                }
+            }
+
+            FXVersion = new FXVersion(major, minor, patch, pre, build);
+
+            return true;
         }
     }
-    return true;
 }
-
-static bool validIdentifier(const pal::string_t& id, bool buildMeta)
-{
-    if (id.empty())
-    {
-        // Identifier must not be empty
-        return false;
-    }
-
-    if (!validIdentifierCharSet(id))
-    {
-        // ids must be of the set [0-9a-zA-Z-]
-        return false;
-    }
-
-    if (!buildMeta && id[0] == _X('0') && id[1] != 0 && index_of_non_numeric(id, 1) == pal::string_t::npos)
-    {
-        // numeric identifiers must not be padded with 0s
-        return false;
-    }
-    return true;
-}
-
-static bool validIdentifiers(const pal::string_t& ids)
-{
-    if (ids.empty())
-    {
-        return true;
-    }
-
-    bool prerelease = ids[0] == _X('-');
-    bool buildMeta = ids[0] == _X('+');
-
-    if (!(prerelease || buildMeta))
-    {
-        // ids must start with '-' or '+' for prerelease & build respectively
-        return false;
-    }
-
-    size_t idStart = 1;
-    size_t nextId;
-    while ((nextId = ids.find(_X('.'), idStart)) != pal::string_t::npos)
-    {
-        if (!validIdentifier(ids.substr(idStart, nextId - idStart), buildMeta))
-        {
-            return false;
-        }
-        idStart = nextId + 1;
-    }
-
-    if (!validIdentifier(ids.substr(idStart), buildMeta))
-    {
-        return false;
-    }
-
-    return true;
-}
-
-bool parse_internal(const pal::string_t& ver, fx_ver_t* fx_ver, bool parse_only_production)
-{
-    size_t maj_start = 0;
-    size_t maj_sep = ver.find(_X('.'));
-    if (maj_sep == pal::string_t::npos)
-    {
-        return false;
-    }
-    unsigned major = 0;
-    if (!try_stou(ver.substr(maj_start, maj_sep), &major))
-    {
-        return false;
-    }
-    if (maj_sep > 1 && ver[maj_start] == _X('0'))
-    {
-        // if leading character is 0, and strlen > 1
-        // then the numeric substring has leading zeroes which is prohibited by the specification.
-        return false;
-    }
-
-    size_t min_start = maj_sep + 1;
-    size_t min_sep = ver.find(_X('.'), min_start);
-    if (min_sep == pal::string_t::npos)
-    {
-        return false;
-    }
-
-    unsigned minor = 0;
-    if (!try_stou(ver.substr(min_start, min_sep - min_start), &minor))
-    {
-        return false;
-    }
-    if (min_sep - min_start > 1 && ver[min_start] == _X('0'))
-    {
-        // if leading character is 0, and strlen > 1
-        // then the numeric substring has leading zeroes which is prohibited by the specification.
-        return false;
-    }
-
-    unsigned patch = 0;
-    size_t pat_start = min_sep + 1;
-    size_t pat_sep = index_of_non_numeric(ver, pat_start);
-    if (pat_sep == pal::string_t::npos)
-    {
-        if (!try_stou(ver.substr(pat_start), &patch))
-        {
-            return false;
-        }
-        if (ver[pat_start + 1] != 0 && ver[pat_start] == _X('0'))
-        {
-            // if leading character is 0, and strlen != 1
-            // then the numeric substring has leading zeroes which is prohibited by the specification.
-            return false;
-        }
-
-        *fx_ver = fx_ver_t(major, minor, patch);
-        return true;
-    }
-
-    if (parse_only_production)
-    {
-        // This is a prerelease or has build suffix.
-        return false;
-    }
-
-    if (!try_stou(ver.substr(pat_start, pat_sep - pat_start), &patch))
-    {
-        return false;
-    }
-    if (pat_sep - pat_start > 1 && ver[pat_start] == _X('0'))
-    {
-        return false;
-    }
-
-    size_t pre_start = pat_sep;
-    size_t pre_sep = ver.find(_X('+'), pat_sep);
-
-    pal::string_t pre = (pre_sep == pal::string_t::npos) ? ver.substr(pre_start) : ver.substr(pre_start, pre_sep - pre_start);
-
-    if (!validIdentifiers(pre))
-    {
-        return false;
-    }
-
-    pal::string_t build;
-
-    if (pre_sep != pal::string_t::npos)
-    {
-        build = ver.substr(pre_sep);
-
-        if (!validIdentifiers(build))
-        {
-            return false;
-        }
-    }
-
-    *fx_ver = fx_ver_t(major, minor, patch, pre, build);
-    return true;
-}
-
